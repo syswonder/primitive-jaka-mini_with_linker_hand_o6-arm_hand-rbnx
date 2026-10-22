@@ -1,0 +1,10 @@
+rbnx-build/
+__pycache__/
+*.pyc
+.venv/
+logs/
+
+# JAKA SDK binaries for platforms other than aarch64-linux-gnu (that set is
+# committed — Apache-2.0, see NOTICE). Kept out of git to cap repo size.
+jaka_arm/jaka_sdk/x86_64-linux-gnu/
+jaka_arm/jaka_sdk/windows/

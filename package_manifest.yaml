@@ -1,0 +1,42 @@
+manifestVersion: 1
+
+build: bash scripts/build.sh
+
+start: bash scripts/start.sh
+
+package:
+  name: "robonix.primitive.jaka.arm_hand"
+  version: 0.1.0
+  description: "JAKA 6-DOF arm + LinkerHand O6 dexterous hand primitive over one jkrc TCP session: arm contracts always, hand contracts in end_effector: hand mode (TG-9801 gripper mode retained)."
+  tags:
+    - primitive
+    - arm
+    - jaka
+    - gripper
+    - hand
+    - dexterous
+    - arm-hand
+    - linkerhand
+    - o6
+    - robonix
+  maintainers:
+    - Felix <xi.lifeng@qq.com>
+  license: Apache-2.0
+
+# The arm contracts are always served. The hand contracts are served in
+# `end_effector: hand` mode (O6 on the same RS485 end channel); in the default
+# gripper mode their handlers answer ok=false ("hand mode not enabled") — the
+# contracts stay registered so the same package serves both deployments and
+# the manifest matches Atlas in either mode.
+capabilities:
+  - name: robonix/primitive/arm/joint_states
+  - name: robonix/primitive/arm/joint_command
+  - name: robonix/primitive/arm/pos_command
+  - name: robonix/primitive/arm/end_pose
+  - name: robonix/primitive/hand/info
+  - name: robonix/primitive/hand/move_joint
+  - name: robonix/primitive/hand/state_joint
+  - name: robonix/primitive/hand/set_joint_speed_limits
+  - name: robonix/primitive/hand/set_joint_torque_limits
+
+depends: []

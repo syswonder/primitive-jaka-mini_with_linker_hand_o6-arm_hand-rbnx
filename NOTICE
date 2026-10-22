@@ -1,0 +1,46 @@
+# NOTICE
+
+## Third-party code
+
+`jaka_arm/driver.py`, `jaka_arm/gripper.py` and `jaka_arm/hand.py` are adapted
+from AIIT-Roboarm (https://github.com/cloud666666666/AIIT-Roboarm,
+arm/jaka_ctrl_by_sdk.py, arm/jaka_gripper.py and arm/jaka_hand.py):
+
+    MIT License
+
+    Copyright (c) 2025 Xu Jinyang & Hou Yunlong
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+## JAKA SDK binaries
+
+`jaka_arm/jaka_sdk/aarch64-linux-gnu/{jkrc.so,libjakaAPI.so}` (jkrc Python
+SDK, pyV2.1.7.0, Linux aarch64) are unmodified binaries from the JAKA (节卡)
+official SDK download (https://www.jaka.com/download — 资料中心 → 二次开发
+→ SDK). JAKA publishes the SDK under the Apache License 2.0: the SDK's
+C/C++ headers carry "Copyright (c) JAKA Robotics, Ltd. … Licensed under the
+Apache License, Version 2.0", and JAKA's official SDK repositories
+(https://github.com/JAKARobotics) are Apache-2.0 as well. A copy of the
+license is at `jaka_arm/jaka_sdk/LICENSE`.
+
+Other platform sets (`x86_64-linux-gnu`, `windows`) are gitignored — download
+the SDK for your arch and place both files under
+`jaka_arm/jaka_sdk/<platform>/`. The loader in `jaka_arm/jaka_sdk/__init__.py`
+picks the platform automatically, and `scripts/build.sh` fails fast with
+these instructions when they are missing.
