@@ -72,10 +72,13 @@ In hand mode a `gripper_joint` entry in `joint_command` is still the skill's
 grip interface: values at/above half the 98 mm stroke open the O6, values below
 half run the full-grasp pose. The skill's five-publish burst is idempotent
 (each publish re-issues the same open/grip command; the O6 settles on the same
-pose). The skill's width readback is absent in hand mode (`joint_states`
-carries the hand joints instead of `gripper_joint`), so a grasp completes but
-is reported as *unverified*; the hand joints themselves are on
-`/jaka/hand/state_joint` and in `joint_states`.
+pose). The skill reconstructs a width-like opening from those hand joints
+(thumb/index/middle/ring flexion, the same 0.098 m scale and verdict
+thresholds), so its empty-grasp/open checks keep working without a
+`gripper_joint` entry. The O6's lost-answer clusters can still look fully
+closed — the skill requires settled samples, but judge critical grasps with
+care. The hand joints are also on `/jaka/hand/state_joint` and in
+`joint_states`.
 
 ## Configuration
 
