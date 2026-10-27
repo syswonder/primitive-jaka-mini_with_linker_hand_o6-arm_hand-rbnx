@@ -5,7 +5,7 @@ build: bash scripts/build.sh
 start: bash scripts/start.sh
 
 package:
-  name: "robonix.primitive.jaka.arm_hand"
+  name: "robonix.primitive.jaka.mini.arm_hand"
   version: 0.1.0
   description: "JAKA 6-DOF arm + LinkerHand O6 dexterous hand primitive over one jkrc TCP session: arm contracts always, hand contracts in end_effector: hand mode (TG-9801 gripper mode retained)."
   tags:
