@@ -30,13 +30,22 @@ package:
 # the manifest matches Atlas in either mode.
 capabilities:
   - name: robonix/primitive/arm/joint_states
+    transport: ros2
   - name: robonix/primitive/arm/joint_command
+    transport: ros2
   - name: robonix/primitive/arm/pos_command
+    transport: ros2
   - name: robonix/primitive/arm/end_pose
+    transport: ros2
   - name: robonix/primitive/hand/info
+    transport: grpc
   - name: robonix/primitive/hand/move_joint
+    transport: grpc
   - name: robonix/primitive/hand/state_joint
+    transport: ros2
   - name: robonix/primitive/hand/set_joint_speed_limits
+    transport: grpc
   - name: robonix/primitive/hand/set_joint_torque_limits
+    transport: grpc
 
 depends: []
