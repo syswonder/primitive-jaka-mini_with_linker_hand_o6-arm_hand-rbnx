@@ -121,9 +121,9 @@ def init(cfg: dict):
     hand_bus = str(cfg.get("hand_bus", "controller"))
     if hand_bus not in ("controller", "usb"):
         return Err(f"config `hand_bus` must be controller|usb, got {hand_bus!r}")
-    if hand_bus == "usb" and not cfg.get("hand_port"):
-        return Err("config `hand_port` is required when hand_bus is usb")
     _hand_mode = end_effector == "hand"
+    if _hand_mode and hand_bus == "usb" and not cfg.get("hand_port"):
+        return Err("config `hand_port` is required when hand_bus is usb")
 
     topics = cfg.get("topics") or {}
     provider.create_publisher(

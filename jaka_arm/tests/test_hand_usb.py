@@ -151,14 +151,42 @@ class FakeUsbLink:
 
 
 class FakeRC:
+    def __init__(self):
+        self.powered = 0
+        self.enabled = 0
+
     def enable_robot(self):
+        self.enabled += 1
         return (0,)
 
     def power_on(self):
+        self.powered += 1
         return (0,)
 
     def get_actual_joint_position(self):
         return (0, [0.0] * 6)
+
+
+class FakeUSBHandLink(FakeUsbLink):
+    """USB hand whose power_on() does NOT power the arm (unlike the RS485
+    JakaHand, where power_on() is the shared jkrc power-on)."""
+
+
+class TestBringUp(unittest.TestCase):
+    def test_usb_bus_powers_the_arm_itself(self):
+        drv = D.JakaDriver(ip="0.0.0.0", end_effector="hand", hand_bus="usb",
+                           hand_port="/dev/fake")
+        drv._rc = FakeRC()
+        import jaka_arm.hand_usb as HU
+
+        orig = HU.JakaHandUsb
+        HU.JakaHandUsb = lambda **kw: FakeUSBHandLink()
+        try:
+            drv._connect_hand()
+        finally:
+            HU.JakaHandUsb = orig
+        self.assertEqual(drv._rc.powered, 1)
+        self.assertEqual(drv._rc.enabled, 1)
 
 
 class TestDriverUsbBus(unittest.TestCase):

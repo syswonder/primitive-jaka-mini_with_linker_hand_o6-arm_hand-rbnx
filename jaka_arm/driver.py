@@ -196,6 +196,9 @@ class JakaDriver:
             self._hand = JakaHandUsb(
                 port=self._hand_port, slave_id=HAND_SLAVE_IDS[self._hand_type])
             self._hand.power_on()
+            # The USB hand has its own power; the arm still needs its power-on
+            # (in controller mode the shared JakaHand.power_on() did this).
+            self._rc.power_on()
             self._rc.enable_robot()
             bus = f"usb {self._hand_port}"
         else:
