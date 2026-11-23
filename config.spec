@@ -19,6 +19,24 @@ config:
   # read warns when the wiring disagrees.
   hand_type: right
 
+  # string, default: controller. Where the O6 is wired:
+  #   controller — the JAKA controller's end RS485L channel (channel 1),
+  #                behind the same jkrc session the arm uses;
+  #   usb        — a serial adapter on the NX (CH340 etc.), the hand's own
+  #                Modbus RTU link, independent of jkrc.
+  # On `usb` the hand no longer needs the arm powered, and hand traffic no
+  # longer competes with arm commands for the jkrc lock / RS485 signal table;
+  # reads are one 6-register Modbus burst (~40 ms) instead of six ~0.38 s
+  # signal-table polls. hand_port is then required.
+  hand_bus: controller
+
+  # string, default: /dev/ttyUSB0. Serial port of the O6 when hand_bus is
+  # usb (115200 8N1, vendor default). Prefer a stable path such as
+  # /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 so a re-plug or a second
+  # adapter does not swap the device. Requires the CH340 driver (ch341) and
+  # the provider user in the `dialout` group.
+  hand_port: /dev/ttyUSB0
+
   # bool, default: false. SAFETY GATE.
   # When false, joint_command / pos_command are rejected with a rate-limited
   # warning; only feedback is published. Follow the staged acceptance flow:
@@ -66,9 +84,11 @@ config:
   state_publish_hz: 50.0
 
   # float, seconds, default: 0.5. Minimum period of the hand/state_joint
-  # loop (end_effector: hand only). The effective rate is bounded from below
-  # by the RS485 read path: one full 6-axis sweep costs ~2.3 s, so the
-  # stream publishes at roughly one sweep per cycle.
+  # loop (end_effector: hand only). On hand_bus: controller the effective
+  # rate is bounded from below by the RS485 read path: one full 6-axis sweep
+  # costs ~2.3 s, so the stream publishes at roughly one sweep per cycle. On
+  # hand_bus: usb a sweep is one ~40 ms Modbus burst, so the loop runs at
+  # this period.
   hand_publish_period_s: 0.5
 
   # string, default: world.

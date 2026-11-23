@@ -25,6 +25,38 @@ global across sessions and misaligns with more than one entry. Splitting the
 hand into its own process is therefore not viable; the arm and the hand share
 one driver, one lock and one signal table here.
 
+Hand state is read the driver-native way: the unchanged RS485 contracts
+(above) in `controller` mode, or `hand/state_joint` on `hand_bus: usb`.
+
+## Two hand buses (`hand_bus`)
+
+The O6 asks the same Modbus RTU questions over two different wires:
+
+| `hand_bus` | wire | read path | arm coupling |
+|---|---|---|---|
+| `controller` (default) | controller end **RS485L**, channel 1, behind the jkrc session | six single-entry signal-table polls, ~2.3 s/sweep | shares the jkrc connection, lock and signal table; needs the arm powered |
+| `usb` | serial adapter on the NX (CH340: `1a86:7523`), e.g. through the hand's RS485-USB converter | one 6-register Modbus burst, ~40 ms | independent: no jkrc session, no signal table, works while the arm is off |
+
+`hand_bus: usb` is the wiring to pick when the hand cable reaches the NX
+directly (instead of the arm's end flange). It sets `hand_port` and keeps
+`end_effector: hand`; the hand contracts, normalized units, open/grip poses
+and `gripper_joint` mapping are identical to the controller bus. Over USB a
+failed read is reported as `None` (the port has CRC + slave replies), so the
+RS485 "lost answer reads as fully flexed" caveat does not apply.
+
+Setup on the NX for `usb`:
+
+1. The CH340 driver (`ch341`) provides `/dev/ttyUSB0`; confirm with
+   `lsusb` (expect `1a86:7523`) and `ls /dev/ttyUSB*`.
+2. The provider user must be in `dialout` (or the device chmod'd `666`, as
+   the vendor SDK's note says). `rbnx` runs as the login user.
+3. Prefer `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` as `hand_port`
+   so a re-plug or a second adapter does not swap device numbers.
+
+The controller-side constraint (one SDK session, one global signal table)
+only applies to `hand_bus: controller`; on `usb` the arm and the hand no
+longer contend for either.
+
 ## Arm contracts
 
 | contract | dir | topic | notes |
@@ -64,7 +96,9 @@ One full six-axis RS485 sweep costs ~2.3 s (one single-entry poll per register),
 so `hand/state_joint` publishes roughly one sweep per `hand_publish_period_s`
 cycle. The O6 answers slowly (2~5 s) after a motion; a lost answer reads as 0,
 so a sweep during that window can briefly show a moving finger as fully
-flexed. Judge grasp results after the motion settles.
+flexed. Judge grasp results after the motion settles. On `hand_bus: usb` a
+sweep is one ~40 ms burst and a lost answer is `None`, so the stream runs at
+the configured period and a moving finger is reported as such.
 
 ## The unchanged JAKA skill
 
@@ -87,6 +121,9 @@ See [config.spec](config.spec). Essentials:
 - `ip` — JAKA controller address.
 - `end_effector` — `gripper` (TG-9801, default) or `hand` (O6).
 - `hand_type` — `right` (`0x27`) or `left` (`0x28`), hand mode only.
+- `hand_bus` — `controller` (controller end RS485L, default) or `usb`
+  (serial adapter on the NX; the hand cable goes to the NX, not the flange).
+- `hand_port` — serial port for `hand_bus: usb` (default `/dev/ttyUSB0`).
 - `motion_enabled` — safety gate (default false); gates both arm and hand
   motions.
 - `gripper_force` / `gripper_speed` — TG-9801 only (ignored in hand mode).
@@ -120,8 +157,9 @@ overlay that `scripts/start.sh` sources.
 .venv/bin/python -m unittest discover -s jaka_arm/tests -t .
 ```
 
-41 tests cover the arm driver (fake jkrc), the TG-9801 adapter and the O6 hand
-driver/contract mapping; no hardware is required.
+52 tests cover the arm driver (fake jkrc), the TG-9801 adapter, the O6 hand
+driver/contract mapping, and the USB bus (fake Modbus client); no hardware is
+required.
 
 Bench smoke 2026-10-22 (JAKA Mini + right O6): one jkrc session served both
 families, `joint_states` carried 6 arm + 6 hand joints, `hand/info` returned

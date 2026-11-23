@@ -17,9 +17,12 @@ With `end_effector: hand` it additionally owns `robonix/primitive/hand/*`:
   set_joint_speed_limits   rpc       per-axis speed ceilings
   set_joint_torque_limits  rpc       per-axis torque ceilings
 
-These contracts are served on the same provider as the arm contracts: the O6
-sits on the controller's RS485 end channel behind one jkrc connection and one
-signal table, so it cannot be owned by a separate process.
+These contracts are served on the same provider as the arm contracts. With
+`hand_bus: controller` the O6 sits on the controller's RS485 end channel
+behind one jkrc connection and one signal table, so it cannot be owned by a
+separate process. With `hand_bus: usb` the hand hangs off a serial adapter
+on the host instead; it is still served here so the provider id, the hand
+contracts and the skill's `gripper_joint` mapping stay the same.
 
 With the default `end_effector: gripper` the hand contracts stay registered
 (the package declares them) but answer ok=false ("hand mode not enabled"):
@@ -115,6 +118,11 @@ def init(cfg: dict):
     hand_type = str(cfg.get("hand_type", "right"))
     if hand_type not in ("right", "left"):
         return Err(f"config `hand_type` must be right|left, got {hand_type!r}")
+    hand_bus = str(cfg.get("hand_bus", "controller"))
+    if hand_bus not in ("controller", "usb"):
+        return Err(f"config `hand_bus` must be controller|usb, got {hand_bus!r}")
+    if hand_bus == "usb" and not cfg.get("hand_port"):
+        return Err("config `hand_port` is required when hand_bus is usb")
     _hand_mode = end_effector == "hand"
 
     topics = cfg.get("topics") or {}
@@ -174,6 +182,8 @@ def activate():
             move_timeout_s=float(_cfg.get("move_timeout_s", 10.0)),
             end_effector=str(_cfg.get("end_effector", "gripper")),
             hand_type=str(_cfg.get("hand_type", "right")),
+            hand_bus=str(_cfg.get("hand_bus", "controller")),
+            hand_port=str(_cfg.get("hand_port", "/dev/ttyUSB0")),
         )
         try:
             _driver.connect()
@@ -466,12 +476,12 @@ def _publish_state_once() -> None:
 def _hand_state_loop() -> None:
     """Publish `hand/state_joint` on a best-effort cadence.
 
-    One full sweep costs ~2.3 s (six single-entry RS485 reads, see hand.py),
-    so the stream is inherently slow — a sweep per cycle is the floor, and
-    between/after sweeps the last cached values are re-emitted so consumers
-    see a continuous stream (the contract is driver-native frequency; the
-    hand's native read path is this slow). When the link is down the loop
-    stops emitting rather than serving a frozen pose as if it were live.
+    One sweep costs ~2.3 s on the controller RS485 path (six single-entry
+    reads, see hand.py) but ~40 ms on the USB path (one Modbus burst). The
+    loop period is `hand_publish_period_s`, but the RS485 sweep is the floor
+    there — a sweep per cycle, with the last cached values re-emitted between
+    sweeps so consumers see a continuous stream. When the link is down the
+    loop stops emitting rather than serving a frozen pose as if it were live.
     """
     period = max(0.1, float(_cfg.get("hand_publish_period_s", 0.5)))
     from hand.msg import JointState as HandJointState, JointValue

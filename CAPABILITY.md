@@ -1,13 +1,17 @@
 # jaka_arm capability notes
 
-JAKA 6-DOF arm (jkrc SDK over TCP) with an end effector on the controller's
-end RS485 channel: a TG-9801 adaptive gripper (`end_effector: gripper`, the
-default) or a LinkerHand O6 six-axis dexterous hand (`end_effector: hand`).
+JAKA 6-DOF arm (jkrc SDK over TCP) with an end effector: a TG-9801 adaptive
+gripper (`end_effector: gripper`, the default) or a LinkerHand O6 six-axis
+dexterous hand (`end_effector: hand`). The O6 is on the controller's end
+RS485 channel (`hand_bus: controller`, the default) or on a host serial
+adapter (`hand_bus: usb`).
 Provider ID is the deploy instance `name` (default `jaka_arm`).
 
-The arm and the end effector share one jkrc session and one RS485 signal
-table. The controller permits only one active SDK session, so both families
-are served by this one provider (see the package README).
+The arm and the end effector are served by one provider. On the controller
+bus they also share one jkrc session and one RS485 signal table: the
+controller permits only one active SDK session, so both families come from
+this one process (see the package README). On the USB bus the hand link is
+independent of jkrc; the contracts still come from this provider.
 
 ## Frames and units
 
@@ -72,8 +76,15 @@ cache.
 
 ## Hand read path
 
-The O6 read path is one single-entry RS485 signal-table poll per register
-(~0.38 s; six axes ~2.3 s); `hand/state_joint` publishes about one sweep per
-`hand_publish_period_s` cycle. The hand answers slowly (2~5 s) after a motion
-and a lost answer reads as 0, so a sweep during that window can briefly report
-a moving finger as fully flexed; read verdicts after the motion settles.
+`hand_bus: controller` — the O6 read path is one single-entry RS485
+signal-table poll per register (~0.38 s; six axes ~2.3 s); `hand/state_joint`
+publishes about one sweep per `hand_publish_period_s` cycle. The hand answers
+slowly (2~5 s) after a motion and a lost answer reads as 0, so a sweep during
+that window can briefly report a moving finger as fully flexed; read verdicts
+after the motion settles.
+
+`hand_bus: usb` — the O6 hangs off a serial adapter on the NX (CH340), not the
+controller; a sweep is one 6-register Modbus burst (~40 ms) and the stream runs
+at `hand_publish_period_s`. A failed read is `None` (no signal-table 0
+fallback), and hand traffic does not share the jkrc session or the RS485
+signal table with the arm.

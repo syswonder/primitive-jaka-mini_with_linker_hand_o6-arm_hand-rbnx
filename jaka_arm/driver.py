@@ -6,8 +6,10 @@
 
 Surface: connect/disconnect/stop_motion, joint & TCP feedback, joint move,
 Cartesian move with controller-side IK fallback, and one of two end
-effectors on the controller's RS485 end channel: the TG-9801 adaptive
-gripper (default) or a LinkerHand O6 6-axis dexterous hand.
+effectors: the TG-9801 adaptive gripper (default) or a LinkerHand O6 6-axis
+dexterous hand. The O6 is reached either on the controller's RS485 end
+channel (hand_bus: controller, shared jkrc session) or over a serial adapter
+on the host (hand_bus: usb, an independent Modbus link — see hand_usb.py).
 
 Units: joints in rad (SDK native), TCP pose in m + rpy rad, gripper opening
 in m (TG-9801 stroke, normalized), hand joints in rad (URDF convention,
@@ -52,8 +54,13 @@ HAND_JOINT_NAMES = [
 # travel (0.52 rad) than the other flexion axes (1.57); thumb_cmc_yaw is
 # 1.54. Mismatches make command limits and RViz disagree.
 HAND_JOINT_UPPER_RAD = [0.52, 1.54, 1.57, 1.57, 1.57, 1.57]
-# O6 RS485 slave ids by hand side (115200 8N1, vendor default).
+# O6 RS485 slave ids by hand side (115200 8N1, vendor default). Same slave
+# ids over the USB (CH340) link.
 HAND_SLAVE_IDS = {"right": 0x27, "left": 0x28}
+# Hand bus: `controller` = the O6 on the JAKA end RS485L channel behind the
+# shared jkrc session; `usb` = the O6 wired directly to the NX over a serial
+# adapter (CH340 etc.), independent of jkrc.
+HAND_BUSES = ("controller", "usb")
 
 # JAKA Mini soft limits (user manual table 5-1, degrees). Verified against
 # the real arm before enabling motion; placeholder limits are from Zu3 docs.
@@ -82,12 +89,16 @@ class JakaDriver:
         move_timeout_s: float = 10.0,
         end_effector: str = "gripper",
         hand_type: str = "right",
+        hand_bus: str = "controller",
+        hand_port: str = "/dev/ttyUSB0",
     ):
         if end_effector not in ("gripper", "hand"):
             raise ValueError(
                 f"end_effector must be 'gripper' or 'hand', got {end_effector!r}")
         if hand_type not in HAND_SLAVE_IDS:
             raise ValueError(f"hand_type must be right|left, got {hand_type!r}")
+        if hand_bus not in HAND_BUSES:
+            raise ValueError(f"hand_bus must be controller|usb, got {hand_bus!r}")
         self._ip = ip
         self._joint_speed_rad_s = float(joint_speed_rad_s)
         self._linear_speed_mm_s = float(linear_speed_mm_s)
@@ -97,6 +108,8 @@ class JakaDriver:
         self._move_timeout_s = float(move_timeout_s)
         self._end_effector = end_effector
         self._hand_type = hand_type
+        self._hand_bus = hand_bus
+        self._hand_port = hand_port
         self._lock = threading.RLock()
         self._rc = None
         self._gripper = None
@@ -165,21 +178,36 @@ class JakaDriver:
         )
 
     def _connect_hand(self) -> None:
-        """O6 hand bring-up on the RS485 end channel (shared-RC mode).
+        """O6 hand bring-up.
 
-        power_on() powers the arm (the hand is fed through the end connector)
-        and waits for the hand to answer; the startup direction read verifies
-        the wiring / slave id (82 = right, 76 = left) instead of leaving a
-        mis-wired hand to be discovered at grasp time.
+        controller bus (shared-RC mode): power_on() powers the arm (the hand
+        is fed through the end connector) and waits for the hand to answer.
+        usb bus: the hand is powered by its own cable, so the arm is enabled
+        as usual and the hand comes up on its serial port independently.
+
+        Both paths read the direction register so a mis-wired / wrong-slave
+        hand is discovered at bring-up, not at grasp time.
         """
-        self._hand = JakaHand(
-            robot=self._rc, slave_id=HAND_SLAVE_IDS[self._hand_type])
-        self._hand.power_on()
-        self._rc.enable_robot()
+        if self._hand_bus == "usb":
+            # Imported here so a controller-bus deployment does not need the
+            # USB serial stack (pymodbus) importable at all.
+            from .hand_usb import JakaHandUsb
+
+            self._hand = JakaHandUsb(
+                port=self._hand_port, slave_id=HAND_SLAVE_IDS[self._hand_type])
+            self._hand.power_on()
+            self._rc.enable_robot()
+            bus = f"usb {self._hand_port}"
+        else:
+            self._hand = JakaHand(
+                robot=self._rc, slave_id=HAND_SLAVE_IDS[self._hand_type])
+            self._hand.power_on()
+            self._rc.enable_robot()
+            bus = "controller RS485L"
         direction = self._hand.read_direction()
         side = {82: "right", 76: "left"}.get(direction, "unknown")
         print(
-            f"[jaka_arm] O6 hand: slave 0x{self._hand.slave_id:02X} "
+            f"[jaka_arm] O6 hand on {bus}: slave 0x{self._hand.slave_id:02X} "
             f"(configured {self._hand_type}, read {side})",
             flush=True,
         )
@@ -200,6 +228,9 @@ class JakaDriver:
                 lambda: self._rc.disable_robot(),
                 lambda: self._rc.power_off(),
                 lambda: self._rc.logout(),
+                # USB hand: release the serial port (RS485 hand: close() is a
+                # no-op, its link is the shared jkrc session).
+                lambda: self._hand.close() if self._hand is not None else None,
             ):
                 try:
                     step()
@@ -357,15 +388,27 @@ class JakaDriver:
     # ---------- hand feedback / commands (end_effector: hand) ----------
 
     def refresh_hand_positions(self) -> bool:
-        """One full hand sweep (~2.3 s total, 6 axes), called by the hand
-        state thread. Caches the raw angles; False when not connected or the
-        link layer is down.
+        """One full hand sweep, called by the hand state thread. Caches the
+        raw angles; False when not connected or the link layer is down.
 
-        The lock is taken per finger, not around the whole sweep: a single
-        read holds it for at most ~0.5 s (retries included), so the 50 Hz arm
+        controller bus: six single-entry RS485 reads (~2.3 s total); the lock
+        is taken per finger, not around the whole sweep, so the 50 Hz arm
         state loop and arm commands interleave between fingers instead of
         stalling for the full sweep (Soma's freshness window is 2 s).
+        usb bus: one Modbus burst for all six angles (~40 ms), so the whole
+        sweep runs inside one short lock hold.
         """
+        if self._hand_bus == "usb":
+            with self._lock:
+                if not self._connected or self._hand is None:
+                    return False
+                raw = self._hand.read_angles()
+            if raw is None:
+                return False
+            with self._hand_cache_lock:
+                self._hand_raw_cache = list(raw)
+            return True
+
         raw = []
         for i in range(len(HAND_JOINT_NAMES)):
             with self._lock:
