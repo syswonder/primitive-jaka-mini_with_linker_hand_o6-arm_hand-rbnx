@@ -14,3 +14,4 @@ numpy>=2,<3
 scipy>=1.15,<2
 # USB-serial O6 hand bus (hand_bus: usb) — Modbus RTU over the CH340 adapter
 pymodbus==3.5.1
+pyserial>=3.5
